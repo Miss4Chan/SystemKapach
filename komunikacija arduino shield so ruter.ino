@@ -1,50 +1,70 @@
 
 #include <SPI.h>
 #include <Ethernet.h>
-
 #include <DHT.h>
 
-#define DHTPIN 8     // Digital pin Temp&Hum sensor
-#define DHTTYPE DHT22  
+#define DHTPIN 8     // Digital pin where the humidity and temperature sensor is connected 
+#define DHTTYPE DHT22   
 
-DHT dht(DHTPIN, DHTTYPE);
+// Sensor pins for soil sensor
+#define sensorPower 2
+#define sensorPin A0
 
-byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED }; //mac of ethernet shield
+const int IN_A0 = A1; // Light sensor pins
+const int IN_D0 = 5; 
 
-char server[] = "192.168.100.37";    // address for the server 
+using namespace std;
 
-IPAddress ip(192, 168, 100, 177); //static address in case of DHCP failure
-IPAddress myDns(192, 168, 100, 1); //Local gateway
+DHT dht(DHTPIN, DHTTYPE); //Initialize dht object 
 
-EthernetClient client;
 
-int count=0;
-float tempValues[10];
+byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED }; //mac of shield
+
+char server[] = "192.168.100.88";    // name address for the server
+
+// Set the static IP address to use if the DHCP fails to assign
+IPAddress ip(192, 168, 100, 177);
+IPAddress myDns(192, 168, 100, 1);
+EthernetClient client; //Ethernet client initializtion
 
 // Variables to measure the speed
 unsigned long beginMicros, endMicros;
 unsigned long byteCount = 0;
 bool printWebData = true;  // set to false for better speed measurement
 
+float average(float a[], int n){
+  int sum = 0;
+  for(int i=0; i<n;i++){
+    sum += a[i];
+  }
+  return (float)sum/n;
+}
+
 void setup() {
-  Serial.begin(115200);
+  Serial.begin(115200); //BAUS rate where DHT works -->  use for everything
   dht.begin(); // Initialize DHT sensor
 
-  Ethernet.init(10);  // Shield cs pin
+  pinMode (IN_A0, INPUT);
+  pinMode (IN_D0, INPUT);
+  Ethernet.init(10);  // CS pin for Ethernet shield
+
   Serial.println("Initialize Ethernet with DHCP:");
   if (Ethernet.begin(mac) == 0) {
-    Serial.println("Failed to configure Ethernet using DHCP"); 
+    Serial.println("Failed to configure Ethernet using DHCP"); //usually works
+    // Check for Ethernet hardware present
     if (Ethernet.hardwareStatus() == EthernetNoHardware) {
       Serial.println("Ethernet shield was not found.  Sorry, can't run without hardware. :(");
       while (true) {
-        delay(1);
+        delay(1); // do nothing, no point running without Ethernet hardware
       }
     }
     if (Ethernet.linkStatus() == LinkOFF) {
       Serial.println("Ethernet cable is not connected.");
     }
+    // try to configure using IP address instead of DHCP:
     Ethernet.begin(mac, ip, myDns);
-  } else {
+  } 
+  else {
     Serial.print("  DHCP assigned IP ");
     Serial.println(Ethernet.localIP());
   }
@@ -57,68 +77,53 @@ void setup() {
   beginMicros = micros();
 }
 
-float average (float * array, int len) 
-{
-  long sum = 0L ;  // sum will be larger than an item, long for safety.
-  for (int i = 0 ; i < len ; i++)
-    sum += array [i] ;
-  return  ((float) sum) / len ;  // average will be fractional, so float may be appropriate.
-}
+int value_A0;
+bool value_D0;
+int count = 0;
+
+//Arrays to keep 10 measurements 
+float Temperature_array[10];
+float Humidity_array[10];
+float Soil_array[10];
+float Light_array[10];
+
+
 
 void loop() {
-	
 
-	if(count>=10)
-	{
-		avgHum = average(tempValues,sizeof(tempValues));
-		float value1 = 5.23;
-  		float value2 = 4.34;
-  		float value3 = 3.45;
-  		float value4 = avgHum;
-  		if (client.connect(server, 80)) {
-   			String postData = "value1=" + String(value1) + "&value2=" + String(value2) + "&value3=" + String(value3) + "&value4=" + String(value4);
-    		client.println("POST /arduino/insert_data.php HTTP/1.1");
-    		client.println("Host: " + String(server));
-    		client.println("Content-Type: application/x-www-form-urlencoded");
-    		client.print("Content-Length: ");
-    		client.println(postData.length());
-    		client.println();
-    		client.println(postData);
-    		client.println();
-  } else {
-    Serial.println("Connection failed");
-  }
-	}
-	else
-	{
-		float temperature = dht.readTemperature();
-  		float humidity = dht.readHumidity();
+  if(count>=10)
+  {
+    int len = client.available();
+    if (len > 0) {
+    byte buffer[80];
+    if (len > 80) len = 80;
+    client.read(buffer, len);
+    if (printWebData) {
+      Serial.write(buffer, len); // show in the serial monitor (slows some boards)
+    }
+    byteCount = byteCount + len;}
+    
 
-  		if (isnan(temperature) || isnan(humidity)) {
-    		Serial.println("Failed to read from DHT sensor!");
-    	return;
-    	delay(1000);
-    	tempValues[count]=humidity;
-    		Serial.print("Temperature: ");
-  			Serial.print(temperature);
- 			Serial.print(" °C, Humidity: ");
-  			Serial.print(humidity);
-  			Serial.println(" %");
-  	}
+    float value1 = average(Light_array, 10);
+    float value2 = average(Soil_array, 10);
+    float value3 = average(Temperature_array, 10);
+    float value4 = average(Humidity_array, 10);
 
-//   // if there are incoming bytes available
-//   // from the server, read them and print them:
-//   int len = client.available();
-//   if (len > 0) {
-//     byte buffer[80];
-//     if (len > 80) len = 80;
-//     client.read(buffer, len);
-//     if (printWebData) {
-//       Serial.write(buffer, len); // show in the serial monitor (slows some boards)
-//     }
-//     byteCount = byteCount + len;
-//   }
-  
+    if (client.connect(server, 80)) {
+    String postData = "value1=" + String(value1) + "&value2=" + String(value2) + "&value3=" + String(value3) + "&value4=" + String(value4);
+
+    client.println("POST /arduino/insert_data.php HTTP/1.1");
+    client.println("Host: " + String(server));
+    client.println("Content-Type: application/x-www-form-urlencoded");
+    client.print("Content-Length: ");
+    client.println(postData.length());
+    client.println();
+    client.println(postData);
+    client.println();
+    } 
+    else {
+    Serial.println("Connection failed");}
+  delay(5000);
   // if the server's disconnected, stop the client:
   if (!client.connected()) {
     endMicros = micros();
@@ -135,9 +140,50 @@ void loop() {
     Serial.print(rate);
     Serial.print(" kbytes/second");
     Serial.println();
-
     // do nothing forevermore:
     while (true) {
-      delay(1);
-    }
+      delay(1);}}
+      count=0;
+
   }
+  else
+  {
+    //Temp and hum sesnsor
+    float temperature = dht.readTemperature();
+    float humidity = dht.readHumidity();
+    //ensure measurements
+    if (isnan(temperature) || isnan(humidity)) {
+    Serial.println("Failed to read from DHT sensor!");
+    return;}
+    Temperature_array[count] = temperature;
+    Humidity_array[count] = humidity;
+    delay(2000);
+    //Light sensor
+    value_A0 = analogRead(IN_A0); // reads the analog input from the IR distance sensor
+    value_D0 = digitalRead(IN_D0);// reads the digital input from the IR distance sensor
+    Light_array[count] = value_A0;
+    //soil sensor
+    delay(2000);
+    digitalWrite(sensorPower, HIGH); // Turn the sensor ON
+    delay(10); // Allow power to settle
+    float val = analogRead(sensorPin); // Read the analog value from sensor
+    float moisture_percentage = (100 - ((val / 1023.00) * 100));
+    digitalWrite(sensorPower, LOW); // Turn the sensor OFF
+    Soil_array[count]= moisture_percentage;
+
+    //print values
+    Serial.print("Temperature: ");
+    Serial.print(temperature);
+    Serial.print(" °C, Humidity: ");
+    Serial.print(humidity);
+    Serial.println(" %");
+    Serial.print("Soil Moisture: ");
+    Serial.print(moisture_percentage);
+    Serial.println(" %");
+    Serial.print(" Analogue = "); 
+    Serial.print(value_A0);
+    Serial.print("\t Digital ="); 
+    Serial.println(value_D0);
+    count++;
+  }
+}
