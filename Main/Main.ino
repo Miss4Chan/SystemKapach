@@ -13,7 +13,6 @@
 const int IN_A0 = A1; // Light sensor pins
 const int IN_D0 = 5; 
 
-const int PumpPin = 4;
 
 using namespace std;
 
@@ -55,10 +54,6 @@ void setup() {
   pinMode (IN_A0, INPUT);
   pinMode (IN_D0, INPUT);
   Ethernet.init(10);  // CS pin for Ethernet shield
-
-  pinMode(PumpPin,OUTPUT);
-  digitalWrite(PumpPin,LOW);
-
   Serial.println("Initialize Ethernet with DHCP:");
   if (Ethernet.begin(mac) == 0) {
     Serial.println("Failed to configure Ethernet using DHCP"); //usually works
@@ -114,63 +109,74 @@ void loop() {
     }
     byteCount = byteCount + len;}
     
-
+    delay(1000);
     float value1 = average(Light_array, 10);
+      delay(1000);
     float value2 = average(Soil_array, 10);
+      delay(1000);
     float value3 = average(Temperature_array, 10);
+      delay(1000);
     float value4 = average(Humidity_array, 10);
+      delay(1000);
     Serial.println(value1);
     Serial.println(value2);
     Serial.println(value3);
     Serial.println(value4);
-
+    delay(1000);
     //Funckija proveri dali treba pump
-    bool flag = 0;
-    flag = water(value1,value2,value3,value4);
-    if(flag)
-    {
-        digitalWrite(PumpPin,HIGH);
-        delay(1000);
-        digitalWrite(PumpPin,LOW);
-    }
-
-
     if (client.connect(server, 80)) {
-    String postData = "value1=" + String(value1) + "&value2=" + String(value2) + "&value3=" + String(value3) + "&value4=" + String(value4);
-
-    client.println("POST /arduino/insert_data.php HTTP/1.1");
-    client.println("Host: " + String(server));
-    client.println("Content-Type: application/x-www-form-urlencoded");
-    client.print("Content-Length: ");
-    client.println(postData.length());
-    client.println();
-    client.println(postData);
-    client.println();
+      String postData = "value1=" + String(value1) + "&value2=" + String(value2) + "&value3=" + String(value3) + "&value4=" + String(value4);
+      client.println("POST /arduino/insert_data.php HTTP/1.1");
+      client.println("Host: " + String(server));
+      client.println("Content-Type: application/x-www-form-urlencoded");
+      client.print("Content-Length: ");
+      client.println(postData.length());
+      client.println();
+      client.println(postData);
+      client.println();
+      Serial.println("POST sent");
+        delay(1000);
     } 
     else {
-    Serial.println("Connection failed");}
-  delay(5000);
-  // if the server's disconnected, stop the client:
-  if (!client.connected()) {
-    endMicros = micros();
-    Serial.println();
-    Serial.println("disconnecting.");
-    client.stop();
-    Serial.print("Received ");
-    Serial.print(byteCount);
-    Serial.print(" bytes in ");
-    float seconds = (float)(endMicros - beginMicros) / 1000000.0;
-    Serial.print(seconds, 4);
-    float rate = (float)byteCount / seconds / 1000.0;
-    Serial.print(", rate = ");
-    Serial.print(rate);
-    Serial.print(" kbytes/second");
-    Serial.println();
-    // do nothing forevermore:
-    while (true) {
-      delay(1);}}
-      count=0;
+      Serial.println("Connection failed");
+    }
+    bool flag = 0;
 
+    flag = water(value1,value2,value3,value4);
+    delay(1000);
+    if(flag)
+    {
+        Serial.write('<');
+        delay(2000);
+    }
+
+  
+    delay(1000);
+  // if the server's disconnected, stop the client:
+    if (!client.connected()) 
+    {
+      Serial.println("Client not connected");
+      endMicros = micros();
+      Serial.println();
+      Serial.println("disconnecting.");
+      client.stop();
+      Serial.print("Received ");
+      Serial.print(byteCount);
+      Serial.print(" bytes in ");
+      float seconds = (float)(endMicros - beginMicros) / 1000000.0;
+      Serial.print(seconds, 4);
+      float rate = (float)byteCount / seconds / 1000.0;
+      Serial.print(", rate = ");
+      Serial.print(rate);
+      Serial.print(" kbytes/second");
+      Serial.println();
+      // do nothing forevermore:
+      while (true) {
+        delay(1);
+        }
+    }
+      count=0;
+      delay(1000);
   }
   else
   {
@@ -196,6 +202,7 @@ void loop() {
     float moisture_percentage = (100 - ((val / 1023.00) * 100));
     digitalWrite(sensorPower, LOW); // Turn the sensor OFF
     Soil_array[count]= moisture_percentage;
+    delay(2000);
 
     //print values
     // Serial.print("Temperature: ");
@@ -210,7 +217,7 @@ void loop() {
     // Serial.print(value_A0);
     // Serial.print("\t Digital ="); 
     // Serial.println(value_D0);
-    Serial.println("Data measured");
+    //Serial.println("Data measured");
     count++;
   }
 }
