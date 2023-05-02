@@ -13,6 +13,7 @@
 const int IN_A0 = A1; // Light sensor pins
 const int IN_D0 = 5; 
 
+
 using namespace std;
 
 DHT dht(DHTPIN, DHTTYPE); //Initialize dht object 
@@ -20,17 +21,24 @@ DHT dht(DHTPIN, DHTTYPE); //Initialize dht object
 
 byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED }; //mac of shield
 
-char server[] = "192.168.100.88";    // name address for the server
+char server[] = "13.81.0.251";    // name address for the server
 
 // Set the static IP address to use if the DHCP fails to assign
-IPAddress ip(192, 168, 100, 177);
-IPAddress myDns(192, 168, 100, 1);
+ IPAddress ip(192, 168, 100, 177);
+ IPAddress myDns(192, 168, 100, 1);
 EthernetClient client; //Ethernet client initializtion
 
 // Variables to measure the speed
 unsigned long beginMicros, endMicros;
 unsigned long byteCount = 0;
 bool printWebData = true;  // set to false for better speed measurement
+
+bool water(float v1,float v2,float v3,float v4)
+{
+  //algorithm and logic :))
+  if(v1>=500 && v2<=30 && v3>=10 && v4<70)
+    return 1;
+}
 
 float average(float a[], int n){
   int sum = 0;
@@ -46,8 +54,8 @@ void setup() {
 
   pinMode (IN_A0, INPUT);
   pinMode (IN_D0, INPUT);
+  
   Ethernet.init(10);  // CS pin for Ethernet shield
-
   Serial.println("Initialize Ethernet with DHCP:");
   if (Ethernet.begin(mac) == 0) {
     Serial.println("Failed to configure Ethernet using DHCP"); //usually works
@@ -103,48 +111,74 @@ void loop() {
     }
     byteCount = byteCount + len;}
     
-
-    float value1 = average(Light_array, 10);
-    float value2 = average(Soil_array, 10);
-    float value3 = average(Temperature_array, 10);
-    float value4 = average(Humidity_array, 10);
-
+    delay(1000);
+    float LightLevel = average(Light_array, 10);
+      delay(1000);
+    float SoilMoist = average(Soil_array, 10);
+      delay(1000);
+    float Temp = average(Temperature_array, 10);
+      delay(1000);
+    float Humidity = average(Humidity_array, 10);
+      delay(1000);
+    Serial.println(LightLevel);
+    Serial.println(SoilMoist);
+    Serial.println(Temp);
+    Serial.println(Humidity);
+    delay(1000);
+    //Funckija proveri dali treba pump
     if (client.connect(server, 80)) {
-    String postData = "value1=" + String(value1) + "&value2=" + String(value2) + "&value3=" + String(value3) + "&value4=" + String(value4);
-
-    client.println("POST /arduino/insert_data.php HTTP/1.1");
-    client.println("Host: " + String(server));
-    client.println("Content-Type: application/x-www-form-urlencoded");
-    client.print("Content-Length: ");
-    client.println(postData.length());
-    client.println();
-    client.println(postData);
-    client.println();
+      String postData = "LightLevel=" + String(LightLevel) + "&SoilMoist=" + String(SoilMoist) + "&Temp=" + String(Temp) + "&Humidity=" + String(Humidity);
+      client.println("POST /arduino/insert_data.php HTTP/1.1");
+      client.println("Host: " + String(server));
+      client.println("Content-Type: application/x-www-form-urlencoded");
+      client.print("Content-Length: ");
+      client.println(postData.length());
+      client.println();
+      client.println(postData);
+      client.println();
+      Serial.println("POST sent");
+        delay(1000);
     } 
     else {
-    Serial.println("Connection failed");}
-  delay(5000);
-  // if the server's disconnected, stop the client:
-  if (!client.connected()) {
-    endMicros = micros();
-    Serial.println();
-    Serial.println("disconnecting.");
-    client.stop();
-    Serial.print("Received ");
-    Serial.print(byteCount);
-    Serial.print(" bytes in ");
-    float seconds = (float)(endMicros - beginMicros) / 1000000.0;
-    Serial.print(seconds, 4);
-    float rate = (float)byteCount / seconds / 1000.0;
-    Serial.print(", rate = ");
-    Serial.print(rate);
-    Serial.print(" kbytes/second");
-    Serial.println();
-    // do nothing forevermore:
-    while (true) {
-      delay(1);}}
-      count=0;
+      Serial.println("Connection failed");
+    }
+    bool flag = 0;
 
+    flag = water(value1,value2,value3,value4);
+    delay(1000);
+    if(flag)
+    {
+        Serial.write('<');
+        delay(2000);
+    }
+
+  
+    delay(1000);
+  // if the server's disconnected, stop the client:
+    if (!client.connected()) 
+    {
+      Serial.println("Client not connected");
+      endMicros = micros();
+      Serial.println();
+      Serial.println("disconnecting.");
+      client.stop();
+      Serial.print("Received ");
+      Serial.print(byteCount);
+      Serial.print(" bytes in ");
+      float seconds = (float)(endMicros - beginMicros) / 1000000.0;
+      Serial.print(seconds, 4);
+      float rate = (float)byteCount / seconds / 1000.0;
+      Serial.print(", rate = ");
+      Serial.print(rate);
+      Serial.print(" kbytes/second");
+      Serial.println();
+      // do nothing forevermore:
+      while (true) {
+        delay(1);
+        }
+    }
+      count=0;
+      delay(1000);
   }
   else
   {
@@ -159,8 +193,8 @@ void loop() {
     Humidity_array[count] = humidity;
     delay(2000);
     //Light sensor
-    value_A0 = analogRead(IN_A0); // reads the analog input from the IR distance sensor
-    value_D0 = digitalRead(IN_D0);// reads the digital input from the IR distance sensor
+    value_A0 = analogRead(IN_A0); // reads the analog input from the light sensor
+    value_D0 = digitalRead(IN_D0);// reads the digital input from the light sensor
     Light_array[count] = value_A0;
     //soil sensor
     delay(2000);
@@ -170,20 +204,22 @@ void loop() {
     float moisture_percentage = (100 - ((val / 1023.00) * 100));
     digitalWrite(sensorPower, LOW); // Turn the sensor OFF
     Soil_array[count]= moisture_percentage;
-
+    delay(2000);
+    Serial.print(count)
     //print values
-    Serial.print("Temperature: ");
-    Serial.print(temperature);
-    Serial.print(" °C, Humidity: ");
-    Serial.print(humidity);
-    Serial.println(" %");
-    Serial.print("Soil Moisture: ");
-    Serial.print(moisture_percentage);
-    Serial.println(" %");
-    Serial.print(" Analogue = "); 
-    Serial.print(value_A0);
-    Serial.print("\t Digital ="); 
-    Serial.println(value_D0);
+    // Serial.print("Temperature: ");
+    // Serial.print(temperature);
+    // Serial.print(" °C, Humidity: ");
+    // Serial.print(humidity);
+    // Serial.println(" %");
+    // Serial.print("Soil Moisture: ");
+    // Serial.print(moisture_percentage);
+    // Serial.println(" %");
+    // Serial.print(" Analogue = "); 
+    // Serial.print(value_A0);
+    // Serial.print("\t Digital ="); 
+    // Serial.println(value_D0);
+    //Serial.println("Data measured");
     count++;
   }
 }
