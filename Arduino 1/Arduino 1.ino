@@ -113,7 +113,7 @@ void loop() {
       Serial.write(buffer, len); // show in the serial monitor (slows some boards)
     }
     byteCount = byteCount + len;}
-    
+    Serial.println();
     delay(1000);
     float LightLevel = average(Light_array, 10);
       delay(1000);
@@ -128,9 +128,17 @@ void loop() {
     Serial.println(Temp);
     Serial.println(Humidity);
     delay(1000);
+    flag = water(LightLevel,SoilMoist,Temp,Humidity);
+    delay(1000);
+    if(flag)
+    {
+        Serial.write('<');
+        Serial.write('\n');
+        delay(3000);
+    }
     //Funckija proveri dali treba pump
     if (client.connect(server, 80)) {
-      String postData = "LightLevel=" + String(LightLevel) + "&SoilMoist=" + String(SoilMoist) + "&Temp=" + String(Temp) + "&Humidity=" + String(Humidity) + "&FlagWater=" + (flag ? "True": "False") ;
+      String postData = "LightLevel=" + String(LightLevel) + "&SoilMoist=" + String(SoilMoist) + "&Temp=" + String(Temp) + "&Humidity=" + String(Humidity) + "&WaterFlag=" + (flag ? "Yes": "No") ;
       client.println("POST /arduino/insert_data.php HTTP/1.1");
       client.println("Host: " + String(server));
       client.println("Content-Type: application/x-www-form-urlencoded");
@@ -147,13 +155,7 @@ void loop() {
     }
     
 
-    flag = water(LightLevel,SoilMoist,Temp,Humidity);
-    delay(1000);
-    if(flag)
-    {
-        Serial.write('<');
-        delay(2000);
-    }
+    
 
   
     delay(1000);
@@ -186,8 +188,9 @@ void loop() {
   else
   {
     Serial.println("Measuring...");
+    delay(500);
+    Serial.print(count);
     delay(1000);
-    Serial.println(count);
     //Temp and hum sesnsor
     float temperature = dht.readTemperature();
     float humidity = dht.readHumidity();
