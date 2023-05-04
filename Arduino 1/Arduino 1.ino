@@ -1,4 +1,3 @@
-
 #include <SPI.h>
 #include <Ethernet.h>
 #include <DHT.h>
@@ -18,7 +17,6 @@ using namespace std;
 
 DHT dht(DHTPIN, DHTTYPE); //Initialize dht object 
 
-
 byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED }; //mac of shield
 
 char server[] = "13.81.0.251";    // name address for the server
@@ -35,8 +33,7 @@ bool printWebData = true;  // set to false for better speed measurement
 
 bool water(float v1,float v2,float v3,float v4)
 {
-  //algorithm and logic :))
-  if(v1>=500 && v2<=30 && v3>=10 && v4<70)
+  if(v1 < 600 && v2 >= 50 && v2 <= 70 && v3 >= 21 && v3 <= 24 && v4 >= 40 && v4 <= 60)
     return 1;
   else
     return 0;
@@ -57,13 +54,14 @@ void setup() {
   pinMode (IN_A0, INPUT);
   pinMode (IN_D0, INPUT);
   
+  
   Ethernet.init(10);  // CS pin for Ethernet shield
   Serial.println("Initialize Ethernet with DHCP:");
   if (Ethernet.begin(mac) == 0) {
     Serial.println("Failed to configure Ethernet using DHCP"); //usually works
     // Check for Ethernet hardware present
     if (Ethernet.hardwareStatus() == EthernetNoHardware) {
-      Serial.println("Ethernet shield was not found.  Sorry, can't run without hardware. :(");
+      Serial.println("Ethernet shield was not found.  Sorry, can't run without hardware. 🙁");
       while (true) {
         delay(1); // do nothing, no point running without Ethernet hardware
       }
@@ -97,137 +95,123 @@ float Humidity_array[10];
 float Soil_array[10];
 float Light_array[10];
 
+float LightLevel;
+float SoilMoist;
+float Temp;
+float Humidity;
 
 
 void loop() {
-
-  if(count>=10)
-  {
+  if(count >= 10) {
     bool flag = 0;
     int len = client.available();
     if (len > 0) {
-    byte buffer[80];
-    if (len > 80) len = 80;
-    client.read(buffer, len);
-    if (printWebData) {
-      Serial.write(buffer, len); // show in the serial monitor (slows some boards)
+      byte buffer[80];
+      if (len > 80) len = 80;
+      client.read(buffer, len);
+      if (printWebData) {
+        Serial.write(buffer, len); // show in the serial monitor (slows some boards)
+      }
+      byteCount = byteCount + len;
     }
-    byteCount = byteCount + len;}
     Serial.println();
     delay(1000);
-    float LightLevel = average(Light_array, 10);
-      delay(1000);
-    float SoilMoist = average(Soil_array, 10);
-      delay(1000);
-    float Temp = average(Temperature_array, 10);
-      delay(1000);
-    float Humidity = average(Humidity_array, 10);
-      delay(1000);
-    Serial.println(LightLevel);
-    Serial.println(SoilMoist);
-    Serial.println(Temp);
-    Serial.println(Humidity);
-    delay(1000);
-    flag = water(LightLevel,SoilMoist,Temp,Humidity);
-    delay(1000);
-    if(flag)
-    {
-        Serial.write('<');
-        Serial.write('\n');
-        delay(3000);
-    }
-    //Funckija proveri dali treba pump
-    if (client.connect(server, 80)) {
-      String postData = "LightLevel=" + String(LightLevel) + "&SoilMoist=" + String(SoilMoist) + "&Temp=" + String(Temp) + "&Humidity=" + String(Humidity) + "&WaterFlag=" + (flag ? "Yes": "No") ;
-      client.println("POST /arduino/insert_data.php HTTP/1.1");
-      client.println("Host: " + String(server));
-      client.println("Content-Type: application/x-www-form-urlencoded");
-      client.print("Content-Length: ");
-      client.println(postData.length());
-      client.println();
-      client.println(postData);
-      client.println();
-      Serial.println("POST sent");
-        delay(1000);
-    } 
-    else {
-      Serial.println("Connection failed");
-    }
+    // Get sensor measurements
     
-
-    
-
-  
+    getSensorMeasurements(Light_array, Soil_array, Temperature_array, Humidity_array);
+    delay(2000);
+    // Check if water pump is needed
+    flag = water(LightLevel, SoilMoist, Temp, Humidity);
     delay(1000);
-  // if the server's disconnected, stop the client:
-    if (!client.connected()) 
-    {
-      Serial.println("Client not connected");
-      endMicros = micros();
-      Serial.println();
-      Serial.println("disconnecting.");
-      client.stop();
-      Serial.print("Received ");
-      Serial.print(byteCount);
-      Serial.print(" bytes in ");
-      float seconds = (float)(endMicros - beginMicros) / 1000000.0;
-      Serial.print(seconds, 4);
-      float rate = (float)byteCount / seconds / 1000.0;
-      Serial.print(", rate = ");
-      Serial.print(rate);
-      Serial.print(" kbytes/second");
-      Serial.println();
-      // do nothing forevermore:
-      while (true) {
-        delay(1);
-        }
+    // Send data to server
+    sendSensorDataToServer(LightLevel, SoilMoist, Temp, Humidity, flag);
+    delay(1000);
+    if(flag) {
+      Serial.write('<');
+      Serial.write('\n');
+      delay(3000);
     }
-      count=0;
-      delay(1000);
+    count = 0;
+
+    delay(6000);
   }
-  else
-  {
-    Serial.println("Measuring...");
-    delay(500);
-    Serial.print(count);
-    delay(1000);
-    //Temp and hum sesnsor
-    float temperature = dht.readTemperature();
-    float humidity = dht.readHumidity();
-    //ensure measurements
-    if (isnan(temperature) || isnan(humidity)) {
-    Serial.println("Failed to read from DHT sensor!");
-    return;}
-    Temperature_array[count] = temperature;
-    Humidity_array[count] = humidity;
-    delay(2000);
-    //Light sensor
-    value_A0 = analogRead(IN_A0); // reads the analog input from the light sensor
-    value_D0 = digitalRead(IN_D0);// reads the digital input from the light sensor
-    Light_array[count] = value_A0;
-    //soil sensor
-    delay(2000);
-    digitalWrite(sensorPower, HIGH); // Turn the sensor ON
-    delay(10); // Allow power to settle
-    float val = analogRead(sensorPin); // Read the analog value from sensor
-    float moisture_percentage = (100 - ((val / 1023.00) * 100));
-    digitalWrite(sensorPower, LOW); // Turn the sensor OFF
-    Soil_array[count]= moisture_percentage;
-    delay(2000);
-    //print values
-    // Serial.print("Temperature: ");
-    // Serial.print(temperature);
-    // Serial.print(" °C, Humidity: ");
-    // Serial.print(humidity);
-    // Serial.println(" %");
-    // Serial.print("Soil Moisture: ");
-    // Serial.print(moisture_percentage);
-    // Serial.println(" %");
-    // Serial.print(" Analogue = "); 
-    // Serial.print(value_A0);
-    // Serial.print("\t Digital ="); 
-    // Serial.println(value_D0);
-    //Serial.println("Data measured");
+  else {
+    // Measure sensors
+    measureSensors();
     count++;
+    delay(20000);
+  }
+}
+
+void getSensorMeasurements(float Light_array[], float Soil_array[], float Temperature_array[], float Humidity_array[]) {
+  LightLevel = average(Light_array, 10);
+  delay(1000);
+  SoilMoist = average(Soil_array, 10);
+  delay(1000);
+  Temp = average(Temperature_array, 10);
+  delay(1000);
+  Humidity = average(Humidity_array, 10);
+  delay(1000);
+  Serial.println(LightLevel);
+  Serial.println(SoilMoist);
+  Serial.println(Temp);
+  Serial.println(Humidity);
+  delay(1000);
+}
+
+void measureSensors() {
+  Serial.println("Measuring...");
+  delay(500);
+  
+  // Measure soil moisture
+  digitalWrite(sensorPower, HIGH);
+  delay(10);
+  int soilMoisture = analogRead(sensorPin);
+  digitalWrite(sensorPower, LOW);
+
+  // Add soil moisture value to array
+  float moisture_percentage = (100 - ((soilMoisture / 1023.00) * 100));
+  Soil_array[count] = moisture_percentage;
+
+  // Print soil moisture value for debugging
+  Serial.print("Soil Moisture: ");
+  Serial.println(soilMoisture);
+
+  // Measure temperature and humidity
+  float temperature = dht.readTemperature();
+  float humidity = dht.readHumidity();
+
+  // Add temperature and humidity values to arrays
+  Temperature_array[count] = temperature;
+  Humidity_array[count] = humidity;
+
+  // Measure light level
+  int lightLevel = analogRead(IN_A0);
+  bool lightStatus = digitalRead(IN_D0);
+
+  // Add light level value to array
+  Light_array[count] = lightLevel;
+
+  delay(1000);
+}
+
+
+void sendSensorDataToServer(float LightLevel, float SoilMoist, float Temp, float Humidity, bool flag) {
+  if (client.connect(server, 80)) {
+    String postData = "LightLevel=" + String(LightLevel) + "&SoilMoist=" + String(SoilMoist) + "&Temp=" + String(Temp) + "&Humidity=" + String(Humidity) + "&WaterFlag=" + (flag ? "Yes": "No") ;
+    client.println("POST /arduino/insert_data.php HTTP/1.1");
+    client.println("Host: " + String(server));
+    client.println("Content-Type: application/x-www-form-urlencoded");
+    client.print("Content-Length: ");
+    client.println(postData.length());
+    client.println();
+    client.println(postData);
+    client.println();
+    Serial.println("POST sent");
+    delay(5000);
+    client.stop();
+  } 
+  else {
+    Serial.println("Connection failed");
   }
 }
